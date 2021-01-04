@@ -27,6 +27,17 @@ def unreliableSend(packet, sock, user, errRate):
     if errRate < rd.randint(0,100):
         sock.sendto(packet, user)
 
+def readFromFile(fileName):
+    lines = []
+    targetFile = open(fileName,'r', encoding='utf-8')
+    while True:
+        line = targetFile.readline() 
+        if len(line) == 0:
+            break
+        lines.append(line)
+        print(line) 
+    return lines
+
 HOST = '127.0.0.1'  # The server's hostname or IP address
 PORT = 65432        # The port used by the server
 user = (HOST, PORT)
@@ -76,6 +87,7 @@ while True:
                 sock.sendto(packet, user)
                 print("sessionKey:", sessionKey)
                 status = 'Data Transfer'
+                handshakeAck=True
             else:
                 #timeout
                 status = 'Start'
@@ -84,27 +96,47 @@ while True:
  
         elif status == 'Data Transfer':
             # get ack 00
-                ack_data, user = sock.recvfrom(1024)
-                print("ACK data:",ack_data)
-                ack_data = AEScipher.decrypt(pad(ack_data))
-                print("ACK data-decrypt:", ack_data)
-                packetType = ack_data[0]
-                if packetType == 1:
-                    print("data transfer ins")
-                    seqNum = ack_data[1]
-                    if seqNum == 0:
-                        lines = readFromFile(fileName)
-                    else: 
-                        print("wordlala")
-                        # tek tek yolla
-                else:
-                    print("waitin gfor my ack")
-                    pass
-                # dosya okuma
-                # kelimlere bölme
-                # tek tek yollama
-                # 
-                # ack kontrolü
-                # go back n oku 
+            ack_data, user = sock.recvfrom(1024)
+            # print("ACK data:",ack_data)
+            ack_data = AEScipher.decrypt(pad(ack_data))
+            packetType = ack_data[0]
+            if packetType == 1:
+                print("ACK data-decrypt:", ack_data[1])
+                seqNum = ack_data[1]
+                if seqNum == 0 and handshakeAck:
+                    handshakeAck=False
+                    lines = readFromFile(fileName)
+                    seqNum = 0
+                    index = 0
+                    expectedACK = 1
+                # else:
+                #     manage data acknowledges
+                if index == len(lines):
+                    status = "Finish" # this will be deleted
+                    continue
+
+                # if last data ack rcvs
+                # change status to FIN
+
+                payload = lines[index].encode('utf-8')
+                seqNum = (seqNum + 1) % 256
+                index += 1
+                packet = toByte(2) + toByte(len(payload)) + toByte(seqNum)
+                packet += payload
+                packet = AEScipher.encrypt(pad(packet))
+                print("Sent data ", seqNum, payload)
+                sock.sendto(packet, user)
+                
+            else:
+                print("waiting for my ack")
+                pass
+        
+        elif status == 'Finish':
+            packet = toByte(3) + toByte(seqNum)
+            packet = AEScipher.encrypt(pad(packet))
+            print("Sent fin ", seqNum) # must be incremented
+            sock.sendto(packet, user)
+            exit()
+
         else:
             exit()
