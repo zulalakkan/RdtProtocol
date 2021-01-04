@@ -33,15 +33,16 @@ user = (HOST, PORT)
 status = "Start"
 
 errRate = 10 # Average Error rate of the unreliable channel
-TIMEOUT = 0.0001 # Timeout value
+TIMEOUT = 5.0001 # Timeout value
 N = 1 # Go-back-N N
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)    # Create UDP socket
 sock.bind(user)
-# sock.settimeout(TIMEOUT)  
+sock.settimeout(TIMEOUT)  
 
 while True:
+    print(status)
     # try - except
     if status == 'Start':
         data, user = sock.recvfrom(1024)
@@ -56,7 +57,7 @@ while True:
             keyIndex = data.find(b'.txtssh-rsa') + 4
             fileName = data[2:keyIndex].decode('utf-8')
             publicKey = data[keyIndex:2+packetLen].decode('utf-8')
-            # print("fileName: {0}\npublicKey:{1}".format(fileName, publicKey))
+            print("fileName: {0}\npublicKey:{1}".format(fileName, publicKey))
 
             # check for filename 
             if os.path.exists(fileName):
@@ -71,28 +72,39 @@ while True:
                 publicKey = RSA.import_key(publicKey)
                 rsaEncryptor = PKCS1_OAEP.new(publicKey)
                 packet = rsaEncryptor.encrypt(packet)
-                unreliableSend(packet, sock, user, errRate)
-                # sock.sendto(packet, user)
+                # unreliableSend(packet, sock, user, errRate)
+                sock.sendto(packet, user)
                 print("sessionKey:", sessionKey)
-
-                # get ack 00
-                data, user = sock.recvfrom(1024)
-                print("ACK data:",data)
-                data = AEScipher.decrypt(pad(data))
-                data = unpad(data)
-                print("ACK data-decrypt:", data)
-                packetType = data[0]
-                if packetType == 1:
-                    seqNum = data[1]
-                    if seqNum == 0:
-                        status = 'Data Transfer'
-                    else:
-                        status = 'Start'
-                else:
-                    status = 'Start'
+                status = 'Data Transfer'
             else:
                 #timeout
+                status = 'Start'
+                sock.sendto(packet, user)
                 continue
  
         elif status == 'Data Transfer':
-            pass
+            # get ack 00
+                ack_data, user = sock.recvfrom(1024)
+                print("ACK data:",ack_data)
+                ack_data = AEScipher.decrypt(pad(ack_data))
+                print("ACK data-decrypt:", ack_data)
+                packetType = ack_data[0]
+                if packetType == 1:
+                    print("data transfer ins")
+                    seqNum = ack_data[1]
+                    if seqNum == 0:
+                        lines = readFromFile(fileName)
+                    else: 
+                        print("wordlala")
+                        # tek tek yolla
+                else:
+                    print("waitin gfor my ack")
+                    pass
+                # dosya okuma
+                # kelimlere bölme
+                # tek tek yollama
+                # 
+                # ack kontrolü
+                # go back n oku 
+        else:
+            exit()
